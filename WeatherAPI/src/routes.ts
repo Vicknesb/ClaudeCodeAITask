@@ -1,17 +1,20 @@
-import { Router, Request, Response } from "express";
+import { Router, Request, Response, NextFunction } from "express";
 import { getForecast, getWeather } from "./weather";
 import { ForecastResponse, HealthResponse, WeatherData } from "./types";
 import { renderDashboard } from "./dashboard";
+import { Errors } from "./errors";
 
 const router = Router();
 
 const CITY_RE = /^[\w\s\-.']{1,100}$/;
 
-function parseCity(raw: string): { ok: true; city: string } | { ok: false; error: string } {
+function validateCity(raw: string): string {
   if (!CITY_RE.test(raw)) {
-    return { ok: false, error: "City must be 1–100 characters and contain only letters, spaces, hyphens, apostrophes, or periods" };
+    throw Errors.badRequest(
+      "City must be 1–100 characters and contain only letters, spaces, hyphens, apostrophes, or periods"
+    );
   }
-  return { ok: true, city: raw };
+  return raw;
 }
 
 router.get("/", (_req: Request, res: Response): void => {
@@ -23,22 +26,20 @@ router.get("/health", (_req: Request, res: Response<HealthResponse>): void => {
   res.json({ status: "ok" });
 });
 
-router.get("/weather/:city", (req: Request, res: Response<WeatherData | { error: string }>): void => {
-  const parsed = parseCity(req.params.city);
-  if (!parsed.ok) {
-    res.status(400).json({ error: parsed.error });
-    return;
+router.get("/weather/:city", (req: Request, res: Response<WeatherData>, next: NextFunction): void => {
+  try {
+    res.json(getWeather(validateCity(req.params.city)));
+  } catch (err) {
+    next(err);
   }
-  res.json(getWeather(parsed.city));
 });
 
-router.get("/forecast/:city", (req: Request, res: Response<ForecastResponse | { error: string }>): void => {
-  const parsed = parseCity(req.params.city);
-  if (!parsed.ok) {
-    res.status(400).json({ error: parsed.error });
-    return;
+router.get("/forecast/:city", (req: Request, res: Response<ForecastResponse>, next: NextFunction): void => {
+  try {
+    res.json(getForecast(validateCity(req.params.city)));
+  } catch (err) {
+    next(err);
   }
-  res.json(getForecast(parsed.city));
 });
 
 export default router;
